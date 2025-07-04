@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ugly Web Scout</title>
+    <style>
+        body { font-family: sans-serif; }
+        #audits { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+        .audit { border: 1px solid #ccc; padding: 1rem; }
+    </style>
+</head>
+<body>
+    <h1>Ugly Web Scout</h1>
+    <div id="search-form">
+        <input type="text" id="industry" placeholder="Industry (e.g., dentists)">
+        <input type="text" id="location" placeholder="Location (e.g., London)">
+        <button id="search">Search</button>
+    </div>
+    <div id="confirmation" style="display: none;">
+        <p>Found <span id="website-count"></span> websites. Do you want to proceed with the audit?</p>
+        <button id="proceed">Proceed</button>
+        <button id="cancel">Cancel</button>
+    </div>
+    <div id="credits"></div>
+    <div id="filters" style="display: none;">
+        <label for="quadrant">Filter by quadrant:</label>
+        <select id="quadrant">
+            <option value="">All</option>
+            <option value="Ugly">Ugly</option>
+            <option value="Poor">Poor</option>
+            <option value="Good">Good</option>
+            <option value="Excellent">Excellent</option>
+        </select>
+        <button id="export">Export CSV</button>
+        <button id="enrich">Enrich Selected</button>
+    </div>
+    <div id="audits"></div>
+
+    <script>
+        const searchForm = document.getElementById('search-form');
+        const industryInput = document.getElementById('industry');
+        const locationInput = document.getElementById('location');
+        const searchButton = document.getElementById('search');
+        const confirmationDiv = document.getElementById('confirmation');
+        const websiteCountSpan = document.getElementById('website-count');
+        const proceedButton = document.getElementById('proceed');
+        const cancelButton = document.getElementById('cancel');
+        const quadrantFilter = document.getElementById('quadrant');
+        const auditsContainer = document.getElementById('audits');
+        const creditsContainer = document.getElementById('credits');
+        const exportButton = document.getElementById('export');
+        const enrichButton = document.getElementById('enrich');
+
+        async function fetchCredits() {
+            const response = await fetch('/credits');
+            const data = await response.json();
+            creditsContainer.innerHTML = `<h2>Credits: ${data.credits}</h2>`;
+        }
+
+        async function fetchAudits() {
+            const quadrant = quadrantFilter.value;
+            const response = await fetch(`/audits?quadrant=${quadrant}`);
+            const audits = await response.json();
+
+            auditsContainer.innerHTML = '';
+            for (const audit of audits) {
+                const auditEl = document.createElement('div');
+                auditEl.className = 'audit';
+                auditEl.innerHTML = `
+                    <input type="checkbox" class="select-audit" data-url="${audit.url}">
+                    <h3>${audit.url}</h3>
+                    <p><strong>Score:</strong> ${audit.score}</p>
+                    <p><strong>Quadrant:</strong> ${audit.quadrant}</p>
+                    <p><strong>Reasons:</strong></p>
+                    <ul>
+                        ${audit.reasons.map(r => `<li>${r}</li>`).join('')}
+                    </ul>
+                `;
+                auditsContainer.appendChild(auditEl);
+            }
+        }
+
+        searchButton.addEventListener('click', async () => {
+            const industry = industryInput.value;
+            const location = locationInput.value;
+            if (!industry || !location) {
+                alert('Please enter both industry and location.');
+                return;
+            }
+
+            const response = await fetch(`/preview-search?industry=${industry}&location=${location}`);
+            const data = await response.json();
+
+            websiteCountSpan.textContent = data.count;
+            searchForm.style.display = 'none';
+            confirmationDiv.style.display = 'block';
+        });
+
+        proceedButton.addEventListener('click', async () => {
+            const industry = industryInput.value;
+            const location = locationInput.value;
+
+            const response = await fetch('/start-audit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ industry, location })
+            });
+
+            if (response.ok) {
+                alert('Audit process started.');
+                confirmationDiv.style.display = 'none';
+                document.getElementById('filters').style.display = 'block';
+                fetchAudits();
+            } else {
+                alert('Error starting audit process.');
+            }
+        });
+
+        cancelButton.addEventListener('click', () => {
+            confirmationDiv.style.display = 'none';
+            searchForm.style.display = 'block';
+        });
+
+        exportButton.addEventListener('click', () => {
+            const quadrant = quadrantFilter.value;
+            window.location.href = `/export?quadrant=${quadrant}`;
+        });
+
+        enrichButton.addEventListener('click', async () => {
+            const selectedAudits = Array.from(document.querySelectorAll('.select-audit:checked')).map(cb => cb.dataset.url);
+            if (selectedAudits.length === 0) {
+                alert('Please select at least one audit to enrich.');
+                return;
+            }
+
+            const response = await fetch('/enrich', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ urls: selectedAudits })
+            });
+
+            if (response.ok) {
+                alert('Enrichment process started.');
+            } else {
+                alert('Error starting enrichment process.');
+            }
+        });
+
+        quadrantFilter.addEventListener('change', fetchAudits);
+        fetchCredits();
+    </script>
+</body>
+</html>
