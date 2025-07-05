@@ -39,7 +39,18 @@
         <button id="export">Export CSV</button>
         <button id="enrich">Enrich Selected</button>
     </div>
-    <div id="audits"></div>
+    <div id="audits">
+        <table>
+            <thead>
+                <tr>
+                    <th>URL</th>
+                    <th>Score</th>
+                    <th>Evaluation</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
 
     <script>
         const searchForm = document.getElementById('search-form');
@@ -54,7 +65,7 @@
         const proceedButton = document.getElementById('proceed');
         const cancelButton = document.getElementById('cancel');
         const quadrantFilter = document.getElementById('quadrant');
-        const auditsContainer = document.getElementById('audits');
+        const auditsTableBody = document.querySelector('#audits tbody');
         const creditsContainer = document.getElementById('credits');
         const exportButton = document.getElementById('export');
         const enrichButton = document.getElementById('enrich');
@@ -74,21 +85,15 @@
             const response = await fetch(`/audits?quadrant=${quadrant}`);
             const audits = await response.json();
 
-            auditsContainer.innerHTML = '';
+            auditsTableBody.innerHTML = '';
             for (const audit of audits) {
-                const auditEl = document.createElement('div');
-                auditEl.className = 'audit';
-                auditEl.innerHTML = `
-                    <input type="checkbox" class="select-audit" data-url="${audit.url}">
-                    <h3>${audit.url}</h3>
-                    <p><strong>Score:</strong> ${audit.score}</p>
-                    <p><strong>Quadrant:</strong> ${audit.quadrant}</p>
-                    <p><strong>Reasons:</strong></p>
-                    <ul>
-                        ${audit.reasons.map(r => `<li>${r}</li>`).join('')}
-                    </ul>
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><a href="${audit.url}" target="_blank">${audit.url}</a></td>
+                    <td>${audit.score}</td>
+                    <td>${audit.reasons}</td>
                 `;
-                auditsContainer.appendChild(auditEl);
+                auditsTableBody.appendChild(row);
             }
         }
 
@@ -127,6 +132,7 @@
                 alert('Audit process started.');
                 confirmationDiv.style.display = 'none';
                 document.getElementById('filters').style.display = 'block';
+                document.getElementById('audits').style.display = 'block';
                 fetchAudits();
             } else {
                 alert('Error starting audit process.');
