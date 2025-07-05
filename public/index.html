@@ -15,10 +15,14 @@
     <div id="search-form">
         <input type="text" id="industry" placeholder="Industry (e.g., dentists)">
         <input type="text" id="location" placeholder="Location (e.g., London)">
+        <div>
+            <label for="radius">Radius: <span id="radius-value">25</span> miles</label>
+            <input type="range" id="radius" min="10" max="100" value="25" step="5">
+        </div>
         <button id="search">Search</button>
     </div>
     <div id="confirmation" style="display: none;">
-        <p>Found <span id="website-count"></span> websites. Do you want to proceed with the audit?</p>
+        <p>Found <span id="total-count"></span> businesses, of which <span id="website-count"></span> have websites. Do you want to proceed with the audit?</p>
         <button id="proceed">Proceed</button>
         <button id="cancel">Cancel</button>
     </div>
@@ -41,8 +45,11 @@
         const searchForm = document.getElementById('search-form');
         const industryInput = document.getElementById('industry');
         const locationInput = document.getElementById('location');
+        const radiusInput = document.getElementById('radius');
+        const radiusValue = document.getElementById('radius-value');
         const searchButton = document.getElementById('search');
         const confirmationDiv = document.getElementById('confirmation');
+        const totalCountSpan = document.getElementById('total-count');
         const websiteCountSpan = document.getElementById('website-count');
         const proceedButton = document.getElementById('proceed');
         const cancelButton = document.getElementById('cancel');
@@ -51,6 +58,10 @@
         const creditsContainer = document.getElementById('credits');
         const exportButton = document.getElementById('export');
         const enrichButton = document.getElementById('enrich');
+
+        radiusInput.addEventListener('input', () => {
+            radiusValue.textContent = radiusInput.value;
+        });
 
         async function fetchCredits() {
             const response = await fetch('/credits');
@@ -84,14 +95,16 @@
         searchButton.addEventListener('click', async () => {
             const industry = industryInput.value;
             const location = locationInput.value;
+            const radius = radiusInput.value;
             if (!industry || !location) {
                 alert('Please enter both industry and location.');
                 return;
             }
 
-            const response = await fetch(`/preview-search?industry=${industry}&location=${location}`);
+            const response = await fetch(`/preview-search?industry=${industry}&location=${location}&radius=${radius}`);
             const data = await response.json();
 
+            totalCountSpan.textContent = data.total;
             websiteCountSpan.textContent = data.count;
             searchForm.style.display = 'none';
             confirmationDiv.style.display = 'block';
@@ -100,13 +113,14 @@
         proceedButton.addEventListener('click', async () => {
             const industry = industryInput.value;
             const location = locationInput.value;
+            const radius = radiusInput.value;
 
             const response = await fetch('/start-audit', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ industry, location })
+                body: JSON.stringify({ industry, location, radius })
             });
 
             if (response.ok) {

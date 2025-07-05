@@ -5,6 +5,7 @@ CREATE TABLE audits (
     quadrant TEXT NOT NULL,
     reasons JSONB,
     enriched_data JSONB,
+    email TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

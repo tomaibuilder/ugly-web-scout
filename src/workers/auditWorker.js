@@ -3,21 +3,20 @@ const { Worker } = require('bullmq');
 const db = require('../db');
 const axios = require('axios');
 
-const auditCache = new Map();
-
 const worker = new Worker('audit-queue', async (job) => {
     const { url } = job.data;
     console.log('Processing job:', job.id, url);
 
-    const domain = new URL(url).hostname;
-    if (auditCache.has(domain)) {
-        console.log(`Cache hit for ${domain}. Skipping audit.`);
-        return;
-    }
-
     try {
+        // Check for existing audit in the database
+        const { rows } = await db.query('SELECT * FROM audits WHERE url = $1', [url]);
+        if (rows.length > 0) {
+            console.log(`Cache hit for ${url}. Skipping audit.`);
+            return;
+        }
+
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-            model: 'gpt-3.5-turbo',
+            model: 'gpt-4o',
             messages: [
                 {
                     role: 'system',
@@ -35,19 +34,42 @@ const worker = new Worker('audit-queue', async (job) => {
         });
 
         const auditResult = response.data.choices[0].message.content;
-        const { score, quadrant, reasons } = JSON.parse(auditResult);
+        let score, quadrant, reasons;
+
+        try {
+            const parsedResult = JSON.parse(auditResult);
+            score = parsedResult.score;
+            quadrant = parsedResult.quadrant;
+            reasons = parsedResult.reasons;
+        } catch (e) {
+            console.error(`Error parsing JSON for job ${job.id}:`, auditResult);
+            // Optionally, you could try to extract the JSON from a larger string
+            const jsonMatch = auditResult.match(/\{.*\}/s);
+            if (jsonMatch) {
+                try {
+                    const parsedResult = JSON.parse(jsonMatch[0]);
+                    score = parsedResult.score;
+                    quadrant = parsedResult.quadrant;
+                    reasons = parsedResult.reasons;
+                } catch (e2) {
+                    console.error(`Still failed to parse JSON for job ${job.id} after extraction.`);
+                    throw new Error('Invalid JSON response from OpenAI');
+                }
+            } else {
+                throw new Error('No JSON object found in the response from OpenAI');
+            }
+        }
+
 
         await db.query(
             'INSERT INTO audits (url, score, quadrant, reasons) VALUES ($1, $2, $3, $4)',
             [url, score, quadrant, JSON.stringify(reasons)]
         );
 
-        auditCache.set(domain, true); // Cache the domain to prevent re-auditing
-
         console.log(`Audit for ${url} completed and saved to the database.`);
 
     } catch (error) {
-        console.error(`Error processing job ${job.id} for url ${url}:`, error);
+        console.error(`Error processing job ${job.id} for url ${url}:`, error.message);
         throw error; // This will cause the job to be retried
     }
 

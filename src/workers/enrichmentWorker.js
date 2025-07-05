@@ -11,21 +11,27 @@ const worker = new Worker('enrichment-queue', async (job) => {
         const leads = urls.map(url => ({ website: url }));
         const enrichedData = await enrichLeads(leads);
 
+        if (!enrichedData) {
+            throw new Error('No data returned from DropContact');
+        }
+
         for (const data of enrichedData) {
-            // Assuming the DropContact API returns an object with a 'website' property
+            // Assuming the DropContact API returns an object with a 'website' and 'email' property
             const url = data.website;
+            const email = data.email;
             // The rest of the data is the enriched data
             delete data.website;
+            delete data.email;
             await db.query(
-                'UPDATE audits SET enriched_data = $1 WHERE url = $2',
-                [JSON.stringify(data), url]
+                'UPDATE audits SET enriched_data = $1, email = $2 WHERE url = $3',
+                [JSON.stringify(data), email, url]
             );
         }
 
         console.log(`Enrichment for job ${job.id} completed.`);
 
     } catch (error) {
-        console.error(`Error processing enrichment job ${job.id}:`, error);
+        console.error(`Error processing enrichment job ${job.id}:`, error.message);
         throw error; // This will cause the job to be retried
     }
 
